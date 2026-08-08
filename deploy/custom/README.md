@@ -1,6 +1,6 @@
 # Custom Firecrawl deployment
 
-Production deployment owned by the versioned `custom-v2.11.192` branch of the Firecrawl fork. It replaces the former `firecrawl-deploy` repository and the standalone `searxng-deploy` stack.
+Production deployment owned by the versioned `custom-v2.11.192` branch of the Firecrawl fork. Firecrawl and its private SearXNG dependency now have one canonical deployment owner.
 
 ## Pinned application versions
 
@@ -20,7 +20,7 @@ Firecrawl uses its release image rather than a local source build. SearXNG is an
 - LLM/embedding: LiteLLM over `litellm_default`
 - Cross-stack access: `firecrawl` network
 
-Firecrawl, 9Router, and OpenWebUI use the same SearXNG service at `http://searxng:8080/search`. Only loopback ports are published.
+Firecrawl and 9Router use the same SearXNG service at `http://searxng:8080/search`. OpenWebUI uses Firecrawl at `http://firecrawl-api:3002`, so its web search reaches this SearXNG service through Firecrawl. Only loopback ports are published.
 
 The Compose project remains `firecrawl`, preserving these named volumes during migration:
 
