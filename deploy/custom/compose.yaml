@@ -8,7 +8,7 @@ x-logging: &logging
 
 services:
   valkey:
-    image: valkey/valkey:8-alpine@sha256:a038175878d66b9d274fbf8be73c0305e93798b83917647f167e18cef3c71eec
+    image: valkey/valkey:8.1.9-alpine
     pull_policy: always
     restart: unless-stopped
     command: valkey-server --bind 0.0.0.0 --save "" --appendonly no
@@ -26,7 +26,7 @@ services:
     logging: *logging
 
   searxng:
-    image: docker.io/searxng/searxng:2026.8.4-c63835bd2@sha256:f4c8e59de166ed71f6380c0847c312ca51f0d41996e31d0559163b6b09ecde52
+    image: docker.io/searxng/searxng:2026.8.4-c63835bd2
     pull_policy: always
     restart: unless-stopped
     ports:
@@ -64,7 +64,7 @@ services:
     networks: [default, firecrawl]
 
   redis:
-    image: redis:alpine@sha256:978f0e01593e65eed801f2402944efcd936d43b5027e4908a7897baf88ed6241
+    image: redis:7.4.10-alpine
     pull_policy: always
     restart: unless-stopped
     command: redis-server --bind 0.0.0.0 --save "" --appendonly no
@@ -82,7 +82,7 @@ services:
     logging: *logging
 
   rabbitmq:
-    image: rabbitmq:3-management-alpine@sha256:606d8c0d6b3c18d1da9afc53bc7cdb2a8d5486df91b5a9830e9e07626c9ae281
+    image: rabbitmq:3.13.7-management-alpine
     pull_policy: always
     restart: unless-stopped
     environment:
@@ -104,7 +104,7 @@ services:
     logging: *logging
 
   db:
-    image: ghcr.io/firecrawl/nuq-postgres:latest@sha256:aed86f62858f29bd971abddcdeb301c12888098d2cf5d33c1ba42b053bc460f6
+    image: ghcr.io/firecrawl/nuq-postgres@sha256:aed86f62858f29bd971abddcdeb301c12888098d2cf5d33c1ba42b053bc460f6
     pull_policy: always
     restart: unless-stopped
     environment:
@@ -127,7 +127,7 @@ services:
     logging: *logging
 
   playwright:
-    image: ghcr.io/firecrawl/playwright-service:latest@sha256:468009bae00911d40d7120d58489a1d529362c22c45585cb9076094fe61b0025
+    image: ghcr.io/firecrawl/playwright-service@sha256:468009bae00911d40d7120d58489a1d529362c22c45585cb9076094fe61b0025
     pull_policy: always
     restart: unless-stopped
     environment:
@@ -152,7 +152,7 @@ services:
     logging: *logging
 
   api:
-    image: ghcr.io/firecrawl/firecrawl:2.11.192@sha256:4d24b41634f63b470e69c9bc34e75e05fbc3ce52eee39b5b5d38fc628b2fd51b
+    image: ghcr.io/firecrawl/firecrawl:2.11.192
     pull_policy: always
     restart: unless-stopped
     ports:
