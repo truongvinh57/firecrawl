@@ -1,0 +1,235 @@
+name: firecrawl
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  valkey:
+    image: valkey/valkey:8-alpine@sha256:a038175878d66b9d274fbf8be73c0305e93798b83917647f167e18cef3c71eec
+    pull_policy: always
+    restart: unless-stopped
+    command: valkey-server --bind 0.0.0.0 --save "" --appendonly no
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks: [default]
+    cpus: 1
+    mem_limit: 256M
+    cpu_shares: 1024
+    labels:
+      stack: firecrawl
+    logging: *logging
+
+  searxng:
+    image: docker.io/searxng/searxng:2026.8.4-c63835bd2@sha256:f4c8e59de166ed71f6380c0847c312ca51f0d41996e31d0559163b6b09ecde52
+    pull_policy: always
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8080:8080"
+    environment:
+      SEARXNG_SECRET: "${SEARXNG_SECRET:?must set SEARXNG_SECRET in .env}"
+      SEARXNG_VALKEY_URL: "valkey://valkey:6379/0"
+      SEARXNG_BASE_URL: "http://searxng:8080/"
+      SEARXNG_PORT: "8080"
+      SEARXNG_BIND_ADDRESS: "0.0.0.0"
+      SEARXNG_LIMITER: "false"
+      SEARXNG_PUBLIC_INSTANCE: "false"
+      SEARXNG_IMAGE_PROXY: "false"
+      GRANIAN_WORKERS: "3"
+    volumes:
+      - ./searxng:/etc/searxng:rw
+      - searxng-cache:/var/cache/searxng
+    cap_drop: [ALL]
+    cap_add: [CHOWN, SETGID, SETUID, DAC_OVERRIDE]
+    depends_on:
+      valkey:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/healthz >/dev/null || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    cpus: 2
+    mem_limit: 768M
+    cpu_shares: 2048
+    labels:
+      stack: firecrawl
+    logging: *logging
+    networks: [default, firecrawl]
+
+  redis:
+    image: redis:alpine@sha256:978f0e01593e65eed801f2402944efcd936d43b5027e4908a7897baf88ed6241
+    pull_policy: always
+    restart: unless-stopped
+    command: redis-server --bind 0.0.0.0 --save "" --appendonly no
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks: [default]
+    cpus: 1
+    mem_limit: 256M
+    cpu_shares: 1024
+    labels:
+      stack: firecrawl
+    logging: *logging
+
+  rabbitmq:
+    image: rabbitmq:3-management-alpine@sha256:606d8c0d6b3c18d1da9afc53bc7cdb2a8d5486df91b5a9830e9e07626c9ae281
+    pull_policy: always
+    restart: unless-stopped
+    environment:
+      RABBITMQ_VM_MEMORY_HIGH_WATERMARK_ABSOLUTE: "800MB"
+    volumes:
+      - rabbitmq:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "check_running"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    networks: [default]
+    cpus: 2
+    mem_limit: 1G
+    cpu_shares: 1024
+    labels:
+      stack: firecrawl
+    logging: *logging
+
+  db:
+    image: ghcr.io/firecrawl/nuq-postgres:latest@sha256:aed86f62858f29bd971abddcdeb301c12888098d2cf5d33c1ba42b053bc460f6
+    pull_policy: always
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-postgres}"
+      POSTGRES_DB: postgres
+    volumes:
+      - postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks: [default]
+    cpus: 2
+    mem_limit: 768M
+    cpu_shares: 1024
+    labels:
+      stack: firecrawl
+    logging: *logging
+
+  playwright:
+    image: ghcr.io/firecrawl/playwright-service:latest@sha256:468009bae00911d40d7120d58489a1d529362c22c45585cb9076094fe61b0025
+    pull_policy: always
+    restart: unless-stopped
+    environment:
+      PORT: "3000"
+      MAX_CONCURRENT_PAGES: "${CRAWL_CONCURRENT_REQUESTS:-4}"
+      BLOCK_MEDIA: "${BLOCK_MEDIA:-true}"
+    tmpfs:
+      - /tmp/.cache:noexec,nosuid,size=512m
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 15s
+      retries: 5
+      start_period: 60s
+    cpus: 4
+    mem_limit: 3G
+    memswap_limit: 3G
+    cpu_shares: 2048
+    networks: [default]
+    labels:
+      stack: firecrawl
+    logging: *logging
+
+  api:
+    image: ghcr.io/firecrawl/firecrawl:2.11.192@sha256:4d24b41634f63b470e69c9bc34e75e05fbc3ce52eee39b5b5d38fc628b2fd51b
+    pull_policy: always
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3002:3002"
+    environment:
+      HOST: "0.0.0.0"
+      PORT: "3002"
+      ENV: local
+      LOGGING_LEVEL: "${LOGGING_LEVEL:-WARN}"
+      REDIS_URL: "redis://redis:6379"
+      REDIS_RATE_LIMIT_URL: "redis://redis:6379"
+      NUQ_RABBITMQ_URL: "amqp://rabbitmq:5672"
+      POSTGRES_HOST: db
+      POSTGRES_PORT: "5432"
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-postgres}"
+      POSTGRES_DB: postgres
+      USE_DB_AUTHENTICATION: "false"
+      PLAYWRIGHT_MICROSERVICE_URL: "http://playwright:3000/scrape"
+      BULL_AUTH_KEY: "${BULL_AUTH_KEY:?must set BULL_AUTH_KEY in .env}"
+      TEST_API_KEY: "${FIRECRAWL_API_KEY:?must set FIRECRAWL_API_KEY in .env}"
+      NUM_WORKERS_PER_QUEUE: "${NUM_WORKERS_PER_QUEUE:-2}"
+      NUQ_WORKER_COUNT: "${NUQ_WORKER_COUNT:-2}"
+      CRAWL_CONCURRENT_REQUESTS: "${CRAWL_CONCURRENT_REQUESTS:-4}"
+      MAX_CONCURRENT_JOBS: "${MAX_CONCURRENT_JOBS:-2}"
+      BROWSER_POOL_SIZE: "${BROWSER_POOL_SIZE:-4}"
+      OPENAI_BASE_URL: "${OPENAI_BASE_URL:-http://proxy:4000/v1}"
+      OPENAI_API_KEY: "${FIRECRAWL_LITELLM_KEY:?must set FIRECRAWL_LITELLM_KEY in .env}"
+      MODEL_NAME: "${FIRECRAWL_MODEL:-gpt-4.1-mini}"
+      MODEL_EMBEDDING_NAME: "${FIRECRAWL_EMBEDDING_MODEL:-text-embedding-3-small}"
+      SEARXNG_ENDPOINT: "http://searxng:8080"
+      SEARXNG_CATEGORIES: "${SEARXNG_CATEGORIES:-general}"
+    command: node dist/src/harness.js --start-docker
+    depends_on:
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      db:
+        condition: service_healthy
+      playwright:
+        condition: service_healthy
+      searxng:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:3002/v0/health/liveness >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 90s
+    ulimits:
+      nofile:
+        soft: 65535
+        hard: 65535
+    cpus: 4
+    mem_limit: 4G
+    memswap_limit: 4G
+    cpu_shares: 2048
+    labels:
+      stack: firecrawl
+    logging: *logging
+    networks:
+      default: {}
+      firecrawl:
+        aliases: [firecrawl-api]
+      litellm: {}
+
+volumes:
+  postgres:
+  rabbitmq:
+  searxng-cache:
+
+networks:
+  default:
+    name: firecrawl-internal
+  firecrawl:
+    external: true
+  litellm:
+    external: true
+    name: litellm_default

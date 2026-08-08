@@ -1,0 +1,15 @@
+# Limiter is disabled for this loopback/internal-only instance. Keep an explicit
+# fail-open internal policy for safe future activation behind a trusted proxy.
+[botdetection.ip_limit]
+link_token = false
+
+[botdetection.ip_lists]
+block_ip = []
+pass_ip = [
+  "127.0.0.0/8",
+  "::1",
+  "10.0.0.0/8",
+  "172.16.0.0/12",
+  "192.168.0.0/16",
+  "fd00::/8",
+]
